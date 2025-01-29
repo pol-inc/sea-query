@@ -18,8 +18,8 @@ impl TableBuilder for PostgresQueryBuilder {
                     None => "char".into(),
                 },
                 ColumnType::String(length) => match length {
-                    Some(length) => format!("varchar({length})"),
-                    None => "varchar".into(),
+                    StringLen::N(length) => format!("varchar({length})"),
+                    _ => "varchar".into(),
                 },
                 ColumnType::Text => "text".into(),
                 ColumnType::TinyInteger | ColumnType::TinyUnsigned => "smallint".into(),
@@ -47,11 +47,11 @@ impl TableBuilder for PostgresQueryBuilder {
                     }
                     typ
                 }
-                ColumnType::Binary(_) => "bytea".into(),
-                ColumnType::VarBinary(length) => format!("bit varying({length})"),
+                ColumnType::Binary(_) | ColumnType::VarBinary(_) | ColumnType::Blob =>
+                    "bytea".into(),
                 ColumnType::Bit(length) => {
                     match length {
-                        Some(length) => format!("varbit({length})"),
+                        Some(length) => format!("bit({length})"),
                         None => "bit".into(),
                     }
                 }
@@ -71,12 +71,16 @@ impl TableBuilder for PostgresQueryBuilder {
                     self.prepare_column_type(elem_type, &mut sql);
                     format!("{sql}[]")
                 }
+                ColumnType::Vector(size) => match size {
+                    Some(size) => format!("vector({size})"),
+                    None => "vector".into(),
+                },
                 ColumnType::Custom(iden) => iden.to_string(),
                 ColumnType::Enum { name, .. } => name.to_string(),
                 ColumnType::Cidr => "cidr".into(),
                 ColumnType::Inet => "inet".into(),
                 ColumnType::MacAddr => "macaddr".into(),
-                ColumnType::Year(_) => unimplemented!("Year is not available in Postgres."),
+                ColumnType::Year => unimplemented!("Year is not available in Postgres."),
                 ColumnType::LTree => "ltree".into(),
             }
         )
@@ -192,7 +196,7 @@ impl TableBuilder for PostgresQueryBuilder {
                 }
                 TableAlterOption::DropForeignKey(name) => {
                     let mut foreign_key = TableForeignKey::new();
-                    foreign_key.name(&name.to_string());
+                    foreign_key.name(name.to_string());
                     let drop = ForeignKeyDropStatement {
                         foreign_key,
                         table: None,

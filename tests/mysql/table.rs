@@ -165,18 +165,17 @@ fn create_6() {
             .table(BinaryType::Table)
             .col(ColumnDef::new(BinaryType::BinaryLen).binary_len(32))
             .col(ColumnDef::new(BinaryType::Binary).binary())
-            .col(ColumnDef::new(BinaryType::BlobSize).blob(BlobSize::Blob(Some(32))))
-            .col(ColumnDef::new(BinaryType::TinyBlob).blob(BlobSize::Tiny))
-            .col(ColumnDef::new(BinaryType::Blob).blob(BlobSize::Blob(None)))
-            .col(ColumnDef::new(BinaryType::MediumBlob).blob(BlobSize::Medium))
-            .col(ColumnDef::new(BinaryType::LongBlob).blob(BlobSize::Long))
+            .col(ColumnDef::new(BinaryType::Blob).blob())
+            .col(ColumnDef::new(BinaryType::TinyBlob).custom(MySqlType::TinyBlob))
+            .col(ColumnDef::new(BinaryType::MediumBlob).custom(MySqlType::MediumBlob))
+            .col(ColumnDef::new(BinaryType::LongBlob).custom(MySqlType::LongBlob))
             .to_string(MysqlQueryBuilder),
         [
             "CREATE TABLE `binary_type` (",
             "`binlen` binary(32),",
-            "`bin` blob, `defb` binary(32),",
-            "`tb` tinyblob,",
+            "`bin` binary(1),",
             "`b` blob,",
+            "`tb` tinyblob,",
             "`mb` mediumblob,",
             "`lb` longblob",
             ")",
@@ -190,13 +189,15 @@ fn create_7() {
     assert_eq!(
         Table::create()
             .table(Char::Table)
+            .col(ColumnDef::new(BinaryType::Blob).blob())
             .col(ColumnDef::new(Char::Character).binary())
             .col(ColumnDef::new(Char::FontSize).binary_len(10))
             .col(ColumnDef::new(Char::SizeW).var_binary(10))
             .to_string(MysqlQueryBuilder),
         [
             "CREATE TABLE `character` (",
-            "`character` blob,",
+            "`b` blob,",
+            "`character` binary(1),",
             "`font_size` binary(10),",
             "`size_w` varbinary(10)",
             ")",
@@ -210,9 +211,9 @@ fn create_8() {
     assert_eq!(
         Table::create()
             .table(Font::Table)
-            .col(ColumnDef::new(Font::Variant).year(Some(MySqlYear::Four)))
+            .col(ColumnDef::new(Font::Variant).year())
             .to_string(MysqlQueryBuilder),
-        "CREATE TABLE `font` ( `variant` year(4) )"
+        "CREATE TABLE `font` ( `variant` year )"
     );
 }
 
@@ -224,6 +225,20 @@ fn create_9() {
             .index(Index::create().name("idx-glyph-id").col(Glyph::Id))
             .to_string(MysqlQueryBuilder),
         "CREATE TABLE `glyph` ( KEY `idx-glyph-id` (`id`) )"
+    );
+}
+
+#[test]
+fn create_10() {
+    assert_eq!(
+        Table::create()
+            .table(Glyph::Table)
+            .col(ColumnDef::new(Glyph::Id).enumeration(
+                Alias::new("tea"),
+                [Alias::new("EverydayTea"), Alias::new("BreakfastTea")]
+            ),)
+            .to_string(MysqlQueryBuilder),
+        "CREATE TABLE `glyph` ( `id` ENUM('EverydayTea', 'BreakfastTea') )"
     );
 }
 
@@ -344,7 +359,7 @@ fn create_with_check_constraint() {
             .check(Expr::col(Glyph::Id).lt(20))
             .check(Expr::col(Glyph::Id).ne(15))
             .to_string(MysqlQueryBuilder),
-        r#"CREATE TABLE `glyph` ( `id` int NOT NULL CHECK (`id` > 10), CHECK (`id` < 20), CHECK (`id` <> 15) )"#,
+        r"CREATE TABLE `glyph` ( `id` int NOT NULL CHECK (`id` > 10), CHECK (`id` < 20), CHECK (`id` <> 15) )",
     );
 }
 
@@ -361,6 +376,6 @@ fn alter_with_check_constraint() {
                     .check(Expr::col(Glyph::Aspect).gt(100))
             )
             .to_string(MysqlQueryBuilder),
-        r#"ALTER TABLE `glyph` ADD COLUMN `aspect` int NOT NULL DEFAULT 101 CHECK (`aspect` > 100)"#,
+        r"ALTER TABLE `glyph` ADD COLUMN `aspect` int NOT NULL DEFAULT 101 CHECK (`aspect` > 100)",
     );
 }

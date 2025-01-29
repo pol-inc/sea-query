@@ -1,9 +1,290 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
- 
+
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
+
+## 0.32.1 - 2024-12-01
+
+### New Features
+
+* Added `Value::as_null`
+```rust
+let v = Value::Int(Some(2));
+let n = v.as_null();
+
+assert_eq!(n, Value::Int(None));
+```
+* Added bitwise and/or operators (`bit_and`, `bit_or`) https://github.com/SeaQL/sea-query/pull/841
+```rust
+let query = Query::select()
+    .expr(1.bit_and(2).eq(3))
+    .to_owned();
+
+assert_eq!(
+    query.to_string(PostgresQueryBuilder),
+    r#"SELECT (1 & 2) = 3"#
+);
+```
+
+### Enhancements
+
+* Added `GREATEST` & `LEAST` function https://github.com/SeaQL/sea-query/pull/844
+* Added `ValueType::enum_type_name()` https://github.com/SeaQL/sea-query/pull/836
+* Removed "one common table" restriction on recursive CTE https://github.com/SeaQL/sea-query/pull/835
+
+### House keeping
+
+* Remove unnecessary string hashes https://github.com/SeaQL/sea-query/pull/815
+
+## 0.32.0 - 2024-10-17
+
+### Releases
+
+#### 2024-08-09
+
++ `sea-query`/`0.32.0-rc.1`
++ `sea-query-binder`/`0.7.0-rc.1`
++ `sea-query-binder`/`0.7.0-rc.2`
++ `sea-query-rusqlite`/`0.7.0-rc.1`
++ `sea-query-postgres`/`0.5.0-rc.1`
+
+#### 2024-10-05
+
++ `sea-query`/`0.32.0-rc.2`
++ `sea-query-attr`/`0.1.3`
++ `sea-query-derive`/`0.4.2`
++ `sea-query-rusqlite`/`0.7.0-rc.2`
+
+### New Features
+
+* Construct Postgres query with vector extension https://github.com/SeaQL/sea-query/pull/774    
+    * Added `postgres-vector` feature flag
+    * Added `Value::Vector`, `ColumnType::Vector`, `ColumnDef::vector()`, `PgBinOper::EuclideanDistance`, `PgBinOper::NegativeInnerProduct` and `PgBinOper::CosineDistance`
+    ```rust
+    assert_eq!(
+        Query::select()
+            .columns([Char::Character])
+            .from(Char::Table)
+            .and_where(
+                Expr::col(Char::Character).eq(Expr::val(pgvector::Vector::from(vec![1.0, 2.0])))
+            )
+            .to_string(PostgresQueryBuilder),
+        r#"SELECT "character" FROM "character" WHERE "character" = '[1,2]'"#
+    );
+    ```
+* Added `ExprTrait` to unify `Expr` and `SimpleExpr` methods https://github.com/SeaQL/sea-query/pull/791
+* Support partial index `CREATE INDEX .. WHERE ..` https://github.com/SeaQL/sea-query/pull/478
+
+### Enhancements
+
+* Replace `Educe` with manual implementations https://github.com/SeaQL/sea-query/pull/817
+
+#### `sea-query-derive`
+
+* Merged `#[enum_def]` into `sea-query-derive`
+* `#[enum_def]` now impl additional `IdenStatic` and `AsRef<str>` https://github.com/SeaQL/sea-query/pull/769
+
+#### `sea-query-attr`
+
+* Updated `syn`, `heck` and `darling`
+* `sea-query-attr` is now deprecated
+
+### Upgrades
+
+* Upgrade `sqlx` to `0.8` https://github.com/SeaQL/sea-query/pull/798
+* Upgrade `bigdecimal` to `0.4` https://github.com/SeaQL/sea-query/pull/798
+* Upgrade `rusqlite` to `0.32` https://github.com/SeaQL/sea-query/pull/802
+
+## 0.31.1 - 2024-10-05
+
+### Enhancements
+
+* Derive `Eq`, `Ord`, `Hash` for `Alias` https://github.com/SeaQL/sea-query/pull/818
+* Added `Func::md5` function https://github.com/SeaQL/sea-query/pull/786
+* Added Postgres Json functions: `JSON_BUILD_OBJECT` and `JSON_AGG` https://github.com/SeaQL/sea-query/pull/787
+* Added `cast_as_quoted` https://github.com/SeaQL/sea-query/pull/789
+* Added `IF NOT EXISTS` to `ALTER TYPE ADD VALUE` https://github.com/SeaQL/sea-query/pull/803
+
+## 0.31.0 - 2024-08-02
+
+### Versions
+
++ `sea-query`/`0.31.0-rc.1`: 2024-01-31
++ `sea-query`/`0.31.0-rc.4`: 2024-02-02
++ `sea-query`/`0.31.0-rc.5`: 2024-04-14
++ `sea-query`/`0.31.0-rc.6`: 2024-05-03
++ `sea-query`/`0.31.0-rc.7`: 2024-06-02
++ `sea-query`/`0.31.0-rc.8`: 2024-06-19
++ `sea-query-binder`/`0.6.0-rc.1`: 2024-01-31
++ `sea-query-binder`/`0.6.0-rc.2`: 2024-04-14
++ `sea-query-binder`/`0.6.0-rc.3`: 2024-06-19
++ `sea-query-binder`/`0.6.0-rc.4`: 2024-06-25
++ `sea-query-binder`/`0.6.0`: 2024-08-02
++ `sea-query-rusqlite`/`0.6.0-rc.1`: 2024-02-19
++ `sea-query-rusqlite`/`0.6.0`: 2024-08-02
++ `sea-query-attr`/`0.1.2`: 2024-04-14
++ `sea-query-diesel`/`0.2.0`: 2024-08-02
+
+### New Features
+
+* Added `table_name` attribute to `enum_def` macro https://github.com/SeaQL/sea-query/pull/759
+* Added `ColumnType::Blob` https://github.com/SeaQL/sea-query/pull/777
+
+### Breaking Changes
+
+* Rework SQLite type mapping https://github.com/SeaQL/sea-query/pull/735
+```rust
+assert_eq!(
+    Table::create()
+        .table(Alias::new("strange"))
+        .col(ColumnDef::new(Alias::new("id")).integer().not_null().auto_increment().primary_key())
+        .col(ColumnDef::new(Alias::new("int1")).integer())
+        .col(ColumnDef::new(Alias::new("int2")).tiny_integer())
+        .col(ColumnDef::new(Alias::new("int3")).small_integer())
+        .col(ColumnDef::new(Alias::new("int4")).big_integer())
+        .col(ColumnDef::new(Alias::new("string1")).string())
+        .col(ColumnDef::new(Alias::new("string2")).string_len(24))
+        .col(ColumnDef::new(Alias::new("char1")).char())
+        .col(ColumnDef::new(Alias::new("char2")).char_len(24))
+        .col(ColumnDef::new(Alias::new("text_col")).text())
+        .col(ColumnDef::new(Alias::new("json_col")).json())
+        .col(ColumnDef::new(Alias::new("uuid_col")).uuid())
+        .col(ColumnDef::new(Alias::new("decimal1")).decimal())
+        .col(ColumnDef::new(Alias::new("decimal2")).decimal_len(12, 4))
+        .col(ColumnDef::new(Alias::new("money1")).money())
+        .col(ColumnDef::new(Alias::new("money2")).money_len(12, 4))
+        .col(ColumnDef::new(Alias::new("float_col")).float())
+        .col(ColumnDef::new(Alias::new("double_col")).double())
+        .col(ColumnDef::new(Alias::new("date_col")).date())
+        .col(ColumnDef::new(Alias::new("time_col")).time())
+        .col(ColumnDef::new(Alias::new("datetime_col")).date_time())
+        .col(ColumnDef::new(Alias::new("boolean_col")).boolean())
+        .col(ColumnDef::new(Alias::new("binary2")).binary_len(1024))
+        .col(ColumnDef::new(Alias::new("binary3")).var_binary(1024))
+        .col(ColumnDef::new(Alias::new("binary4")).blob())
+        .to_string(SqliteQueryBuilder),
+    [
+        r#"CREATE TABLE "strange" ( "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,"#,
+            r#""int1" integer,"#,
+            r#""int2" tinyint,"#,
+            r#""int3" smallint,"#,
+            r#""int4" bigint,"#,
+            r#""string1" varchar,"#,
+            r#""string2" varchar(24),"#,
+            r#""char1" char,"#,
+            r#""char2" char(24),"#,
+            r#""text_col" text,"#,
+            r#""json_col" json_text,"#,
+            r#""uuid_col" uuid_text,"#,
+            r#""decimal1" real,"#,
+            r#""decimal2" real(12, 4),"#,
+            r#""money1" real_money,"#,
+            r#""money2" real_money(12, 4),"#,
+            r#""float_col" float,"#,
+            r#""double_col" double,"#,
+            r#""date_col" date_text,"#,
+            r#""time_col" time_text,"#,
+            r#""datetime_col" datetime_text,"#,
+            r#""boolean_col" boolean,"#,
+            r#""binary2" blob(1024),"#,
+            r#""binary3" varbinary_blob(1024),"#,
+            r#""binary4" blob"#,
+        r#")"#,
+    ]
+    .join(" ")
+);
+```
+* MySQL money type maps to decimal
+* MySQL blob types moved to `sea_query::extension::mysql::MySqlType`; `ColumnDef::blob()` now takes no parameters
+```rust
+assert_eq!(
+    Table::create()
+        .table(BinaryType::Table)
+        .col(ColumnDef::new(BinaryType::BinaryLen).binary_len(32))
+        .col(ColumnDef::new(BinaryType::Binary).binary())
+        .col(ColumnDef::new(BinaryType::Blob).blob())
+        .col(ColumnDef::new(BinaryType::TinyBlob).custom(MySqlType::TinyBlob))
+        .col(ColumnDef::new(BinaryType::MediumBlob).custom(MySqlType::MediumBlob))
+        .col(ColumnDef::new(BinaryType::LongBlob).custom(MySqlType::LongBlob))
+        .to_string(MysqlQueryBuilder),
+    [
+        "CREATE TABLE `binary_type` (",
+            "`binlen` binary(32),",
+            "`bin` binary(1),",
+            "`b` blob,",
+            "`tb` tinyblob,",
+            "`mb` mediumblob,",
+            "`lb` longblob",
+        ")",
+    ]
+    .join(" ")
+);
+```
+* `ColumnDef::binary()` set column type as binary with default length of 1
+* Removed `BlobSize` enum
+* Added `StringLen` to represent length of var-char/binary
+```rust
+/// Length for var-char/binary; default to 255
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum StringLen {
+    /// String size
+    N(u32),
+    Max,
+    #[default]
+    None,
+}
+```
+* `ValueType::columntype()` of `Vec<u8>` maps to `VarBinary(StringLen::None)`
+* `ValueType::columntype()` of `String` maps to `String(StringLen::None)`
+* `ColumnType::Bit` maps to `bit` for Postgres
+* `ColumnType::Binary` and `ColumnType::VarBinary` map to `bytea` for Postgres
+* `Value::Decimal` and `Value::BigDecimal` bind as `real` for SQLite
+* `ColumnType::Year(Option<MySqlYear>)` changed to `ColumnType::Year`
+
+### Enhancements
+
+* Added `IntoColumnDef` trait, allowing `&mut ColumnDef` / `ColumnDef` as argument
+* Added `ColumnType::string()` and `ColumnType::var_binary()` as shim for old API
+* Added `ON DUPLICATE KEY DO NOTHING` polyfill for MySQL https://github.com/SeaQL/sea-query/pull/765
+* Added non-TLS runtime https://github.com/SeaQL/sea-query/pull/783
+
+### House keeping
+
+* Added `ColumnType` mapping documentation
+* Replace `derivative` with `educe` https://github.com/SeaQL/sea-query/pull/763
+
+### Upgrades
+
+* Upgrade `rusqlite` to `0.31` https://github.com/SeaQL/sea-query/pull/755
+* Upgrade `time` to `0.3.36` https://github.com/SeaQL/sea-query/pull/788
+
+## 0.30.8 - Pending
+
+### Enhancements
+
+* Added `InsertStatement::values_from_panic` https://github.com/SeaQL/sea-query/pull/739
+
+## 0.30.7 - 2024-01-12
+
+### Enhancements
+
+* Added `SelectStatement::apply` https://github.com/SeaQL/sea-query/pull/730
+
+### House keeping
+
+* Slight refactors and documentation update
+
+## 0.30.6 - 2024-01-01
+
+### House keeping
+
+* Fix clippy warnings on Rust 1.75 https://github.com/SeaQL/sea-query/pull/729
+
+## `sea-query-rusqlite` 0.5.0 - 2023-12-29
+
+* Upgrade `rusqlite` to `0.30` https://github.com/SeaQL/sea-query/pull/728
 
 ## 0.30.5 - 2023-12-14
 

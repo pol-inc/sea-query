@@ -9,13 +9,59 @@ pub struct ColumnDef {
     pub(crate) spec: Vec<ColumnSpec>,
 }
 
+pub trait IntoColumnDef {
+    fn into_column_def(self) -> ColumnDef;
+}
+
 /// All column types
+///
+/// | ColumnType            | MySQL data type   | PostgreSQL data type        | SQLite data type             |
+/// |-----------------------|-------------------|-----------------------------|------------------------------|
+/// | Char                  | char              | char                        | char                         |
+/// | String                | varchar           | varchar                     | varchar                      |
+/// | Text                  | text              | text                        | text                         |
+/// | TinyInteger           | tinyint           | smallint                    | tinyint                      |
+/// | SmallInteger          | smallint          | smallint                    | smallint                     |
+/// | Integer               | int               | integer                     | integer                      |
+/// | BigInteger            | bigint            | bigint                      | integer                      |
+/// | TinyUnsigned          | tinyint unsigned  | smallint                    | tinyint                      |
+/// | SmallUnsigned         | smallint unsigned | smallint                    | smallint                     |
+/// | Unsigned              | int unsigned      | integer                     | integer                      |
+/// | BigUnsigned           | bigint unsigned   | bigint                      | integer                      |
+/// | Float                 | float             | real                        | float                        |
+/// | Double                | double            | double precision            | double                       |
+/// | Decimal               | decimal           | decimal                     | real                         |
+/// | DateTime              | datetime          | timestamp without time zone | datetime_text                |
+/// | Timestamp             | timestamp         | timestamp                   | timestamp_text               |
+/// | TimestampWithTimeZone | timestamp         | timestamp with time zone    | timestamp_with_timezone_text |
+/// | Time                  | time              | time                        | time_text                    |
+/// | Date                  | date              | date                        | date_text                    |
+/// | Year                  | year              | N/A                         | N/A                          |
+/// | Interval              | N/A               | interval                    | N/A                          |
+/// | Blob                  | blob              | bytea                       | blob                         |
+/// | Binary                | binary            | bytea                       | blob                         |
+/// | VarBinary             | varbinary         | bytea                       | varbinary_blob               |
+/// | Bit                   | bit               | bit                         | N/A                          |
+/// | VarBit                | bit               | varbit                      | N/A                          |
+/// | Boolean               | bool              | bool                        | boolean                      |
+/// | Money                 | decimal           | money                       | real_money                   |
+/// | Json                  | json              | json                        | json_text                    |
+/// | JsonBinary            | json              | jsonb                       | jsonb_text                   |
+/// | Uuid                  | binary(16)        | uuid                        | uuid_text                    |
+/// | Enum                  | ENUM(...)         | ENUM_NAME                   | enum_text                    |
+/// | Array                 | N/A               | DATA_TYPE[]                 | N/A                          |
+/// | Vector                | N/A               | vector                      | N/A                          |
+/// | Cidr                  | N/A               | cidr                        | N/A                          |
+/// | Inet                  | N/A               | inet                        | N/A                          |
+/// | MacAddr               | N/A               | macaddr                     | N/A                          |
+/// | LTree                 | N/A               | ltree                       | N/A                          |
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum ColumnType {
     Char(Option<u32>),
-    String(Option<u32>),
+    String(StringLen),
     Text,
+    Blob,
     TinyInteger,
     SmallInteger,
     Integer,
@@ -32,10 +78,10 @@ pub enum ColumnType {
     TimestampWithTimeZone,
     Time,
     Date,
-    Year(Option<MySqlYear>),
+    Year,
     Interval(Option<PgInterval>, Option<u32>),
-    Binary(BlobSize),
-    VarBinary(u32),
+    Binary(u32),
+    VarBinary(StringLen),
     Bit(Option<u32>),
     VarBit(u32),
     Boolean,
@@ -49,10 +95,21 @@ pub enum ColumnType {
         variants: Vec<DynIden>,
     },
     Array(RcOrArc<ColumnType>),
+    Vector(Option<u32>),
     Cidr,
     Inet,
     MacAddr,
     LTree,
+}
+
+/// Length for var-char/binary; default to 255
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum StringLen {
+    /// String size
+    N(u32),
+    Max,
+    #[default]
+    None,
 }
 
 impl PartialEq for ColumnType {
@@ -61,7 +118,6 @@ impl PartialEq for ColumnType {
             (Self::Char(l0), Self::Char(r0)) => l0 == r0,
             (Self::String(l0), Self::String(r0)) => l0 == r0,
             (Self::Decimal(l0), Self::Decimal(r0)) => l0 == r0,
-            (Self::Year(l0), Self::Year(r0)) => l0 == r0,
             (Self::Interval(l0, l1), Self::Interval(r0, r1)) => l0 == r0 && l1 == r1,
             (Self::Binary(l0), Self::Binary(r0)) => l0 == r0,
             (Self::VarBinary(l0), Self::VarBinary(r0)) => l0 == r0,
@@ -98,6 +154,17 @@ impl ColumnType {
     {
         ColumnType::Custom(Alias::new(ty).into_iden())
     }
+
+    pub fn string(length: Option<u32>) -> ColumnType {
+        match length {
+            Some(s) => ColumnType::String(StringLen::N(s)),
+            None => ColumnType::String(StringLen::None),
+        }
+    }
+
+    pub fn var_binary(length: u32) -> ColumnType {
+        ColumnType::VarBinary(StringLen::N(length))
+    }
 }
 
 /// All column specification keywords
@@ -131,22 +198,6 @@ pub enum PgInterval {
     HourToMinute,
     HourToSecond,
     MinuteToSecond,
-}
-
-// All MySQL year type field length sizes
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum MySqlYear {
-    Two,
-    Four,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum BlobSize {
-    Tiny,
-    /// MySQL & SQLite support `binary(length)` column type
-    Blob(Option<u32>),
-    Medium,
-    Long,
 }
 
 impl ColumnDef {
@@ -266,13 +317,13 @@ impl ColumnDef {
 
     /// Set column type as string with custom length
     pub fn string_len(&mut self, length: u32) -> &mut Self {
-        self.types = Some(ColumnType::String(Some(length)));
+        self.types = Some(ColumnType::String(StringLen::N(length)));
         self
     }
 
     /// Set column type as string
     pub fn string(&mut self) -> &mut Self {
-        self.types = Some(ColumnType::String(None));
+        self.types = Some(ColumnType::String(Default::default()));
         self
     }
 
@@ -405,6 +456,12 @@ impl ColumnDef {
         self
     }
 
+    #[cfg(feature = "postgres-vector")]
+    pub fn vector(&mut self, size: Option<u32>) -> &mut Self {
+        self.types = Some(ColumnType::Vector(size));
+        self
+    }
+
     /// Set column type as timestamp
     pub fn timestamp(&mut self) -> &mut Self {
         self.types = Some(ColumnType::Timestamp);
@@ -431,32 +488,25 @@ impl ColumnDef {
 
     /// Set column type as year
     /// Only MySQL supports year
-    pub fn year(&mut self, length: Option<MySqlYear>) -> &mut Self {
-        self.types = Some(ColumnType::Year(length));
+    pub fn year(&mut self) -> &mut Self {
+        self.types = Some(ColumnType::Year);
         self
     }
 
     /// Set column type as binary with custom length
     pub fn binary_len(&mut self, length: u32) -> &mut Self {
-        self.types = Some(ColumnType::Binary(BlobSize::Blob(Some(length))));
+        self.types = Some(ColumnType::Binary(length));
         self
     }
 
-    /// Set column type as binary
+    /// Set column type as binary with default length of 1
     pub fn binary(&mut self) -> &mut Self {
-        self.types = Some(ColumnType::Binary(BlobSize::Blob(None)));
-        self
-    }
-
-    /// Set column type as blob, but when given BlobSize::Blob(size) argument, this column map to binary(size) type instead.
-    pub fn blob(&mut self, size: BlobSize) -> &mut Self {
-        self.types = Some(ColumnType::Binary(size));
-        self
+        self.binary_len(1)
     }
 
     /// Set column type as binary with variable length
     pub fn var_binary(&mut self, length: u32) -> &mut Self {
-        self.types = Some(ColumnType::VarBinary(length));
+        self.types = Some(ColumnType::VarBinary(StringLen::N(length)));
         self
     }
 
@@ -469,6 +519,12 @@ impl ColumnDef {
     /// Set column type as varbit with variable length
     pub fn varbit(&mut self, length: u32) -> &mut Self {
         self.types = Some(ColumnType::VarBit(length));
+        self
+    }
+
+    /// Set column type as blob
+    pub fn blob(&mut self) -> &mut Self {
+        self.types = Some(ColumnType::Blob);
         self
     }
 
@@ -693,5 +749,17 @@ impl ColumnDef {
             types: self.types.take(),
             spec: std::mem::take(&mut self.spec),
         }
+    }
+}
+
+impl IntoColumnDef for &mut ColumnDef {
+    fn into_column_def(self) -> ColumnDef {
+        self.take()
+    }
+}
+
+impl IntoColumnDef for ColumnDef {
+    fn into_column_def(self) -> ColumnDef {
+        self
     }
 }

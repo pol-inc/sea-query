@@ -34,8 +34,9 @@ impl TableBuilder for MysqlQueryBuilder {
                     None => "char".into(),
                 },
                 ColumnType::String(length) => match length {
-                    Some(length) => format!("varchar({length})"),
-                    None => "varchar(255)".into(),
+                    StringLen::N(length) => format!("varchar({length})"),
+                    StringLen::None => "varchar(255)".into(),
+                    StringLen::Max => "varchar(65535)".into(),
                 },
                 ColumnType::Text => "text".into(),
                 ColumnType::TinyInteger | ColumnType::TinyUnsigned => "tinyint".into(),
@@ -53,28 +54,15 @@ impl TableBuilder for MysqlQueryBuilder {
                 ColumnType::TimestampWithTimeZone => "timestamp".into(),
                 ColumnType::Time => "time".into(),
                 ColumnType::Date => "date".into(),
-                ColumnType::Year(length) => {
-                    match length {
-                        Some(length) => match length {
-                            MySqlYear::Two => "year(2)".into(),
-                            MySqlYear::Four => "year(4)".into(),
-                        },
-                        None => "year".into(),
-                    }
-                }
+                ColumnType::Year => "year".into(),
                 ColumnType::Interval(_, _) => "unsupported".into(),
-                ColumnType::Binary(blob_size) => match blob_size {
-                    BlobSize::Tiny => "tinyblob".into(),
-                    BlobSize::Blob(length) => {
-                        match length {
-                            Some(length) => format!("binary({length})"),
-                            None => "blob".into(),
-                        }
-                    }
-                    BlobSize::Medium => "mediumblob".into(),
-                    BlobSize::Long => "longblob".into(),
+                ColumnType::Binary(length) => format!("binary({length})"),
+                ColumnType::VarBinary(length) => match length {
+                    StringLen::N(length) => format!("varbinary({length})"),
+                    StringLen::None => "varbinary(255)".into(),
+                    StringLen::Max => "varbinary(65535)".into(),
                 },
-                ColumnType::VarBinary(length) => format!("varbinary({length})"),
+                ColumnType::Blob => "blob".into(),
                 ColumnType::Bit(length) => {
                     match length {
                         Some(length) => format!("bit({length})"),
@@ -86,8 +74,8 @@ impl TableBuilder for MysqlQueryBuilder {
                 }
                 ColumnType::Boolean => "bool".into(),
                 ColumnType::Money(precision) => match precision {
-                    Some((precision, scale)) => format!("money({precision}, {scale})"),
-                    None => "money".into(),
+                    Some((precision, scale)) => format!("decimal({precision}, {scale})"),
+                    None => "decimal".into(),
                 },
                 ColumnType::Json => "json".into(),
                 ColumnType::JsonBinary => "json".into(),
@@ -102,6 +90,7 @@ impl TableBuilder for MysqlQueryBuilder {
                         .join("', '")
                 ),
                 ColumnType::Array(_) => unimplemented!("Array is not available in MySQL."),
+                ColumnType::Vector(_) => unimplemented!("Vector is not available in MySQL."),
                 ColumnType::Cidr => unimplemented!("Cidr is not available in MySQL."),
                 ColumnType::Inet => unimplemented!("Inet is not available in MySQL."),
                 ColumnType::MacAddr => unimplemented!("MacAddr is not available in MySQL."),
@@ -165,7 +154,7 @@ impl TableBuilder for MysqlQueryBuilder {
                 }
                 TableAlterOption::DropForeignKey(name) => {
                     let mut foreign_key = TableForeignKey::new();
-                    foreign_key.name(&name.to_string());
+                    foreign_key.name(name.to_string());
                     let drop = ForeignKeyDropStatement {
                         foreign_key,
                         table: None,

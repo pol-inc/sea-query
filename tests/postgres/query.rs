@@ -1519,6 +1519,52 @@ fn insert_on_conflict_9() {
 
 #[test]
 #[allow(clippy::approx_constant)]
+fn insert_on_conflict_do_nothing() {
+    assert_eq!(
+        Query::insert()
+            .into_table(Glyph::Table)
+            .columns([Glyph::Aspect, Glyph::Image])
+            .values_panic(["abcd".into(), 3.1415.into()])
+            .on_conflict(
+                OnConflict::columns([Glyph::Id, Glyph::Aspect])
+                    .do_nothing()
+                    .to_owned(),
+            )
+            .to_string(PostgresQueryBuilder),
+        [
+            r#"INSERT INTO "glyph" ("aspect", "image")"#,
+            r#"VALUES ('abcd', 3.1415)"#,
+            r#"ON CONFLICT ("id", "aspect") DO NOTHING"#,
+        ]
+        .join(" ")
+    );
+}
+
+#[test]
+#[allow(clippy::approx_constant)]
+fn insert_on_conflict_do_nothing_on() {
+    assert_eq!(
+        Query::insert()
+            .into_table(Glyph::Table)
+            .columns([Glyph::Aspect, Glyph::Image])
+            .values_panic(["abcd".into(), 3.1415.into()])
+            .on_conflict(
+                OnConflict::columns([Glyph::Id, Glyph::Aspect])
+                    .do_nothing_on([Glyph::Id])
+                    .to_owned(),
+            )
+            .to_string(PostgresQueryBuilder),
+        [
+            r#"INSERT INTO "glyph" ("aspect", "image")"#,
+            r#"VALUES ('abcd', 3.1415)"#,
+            r#"ON CONFLICT ("id", "aspect") DO NOTHING"#,
+        ]
+        .join(" ")
+    );
+}
+
+#[test]
+#[allow(clippy::approx_constant)]
 fn insert_returning_all_columns() {
     assert_eq!(
         Query::insert()
@@ -1880,6 +1926,16 @@ fn sub_query_with_fn() {
 }
 
 #[test]
+fn md5_fn() {
+    assert_eq!(
+        Query::select()
+            .expr(Func::md5(Expr::val("test")))
+            .to_string(PostgresQueryBuilder),
+        r#"SELECT MD5('test')"#
+    );
+}
+
+#[test]
 fn select_array_contains_bin_oper() {
     assert_eq!(
         Query::select()
@@ -2062,5 +2118,20 @@ fn test_issue_674_nested_logical_panic() {
             .and_where(e)
             .to_string(PostgresQueryBuilder),
         r#"SELECT "character" FROM "character" WHERE TRUE AND (TRUE AND TRUE AND TRUE)"#
+    );
+}
+
+#[test]
+#[cfg(feature = "postgres-vector")]
+fn test_pgvector_select() {
+    assert_eq!(
+        Query::select()
+            .columns([Char::Character])
+            .from(Char::Table)
+            .and_where(
+                Expr::col(Char::Character).eq(Expr::val(pgvector::Vector::from(vec![1.0, 2.0])))
+            )
+            .to_string(PostgresQueryBuilder),
+        r#"SELECT "character" FROM "character" WHERE "character" = '[1,2]'"#
     );
 }
