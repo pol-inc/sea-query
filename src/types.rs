@@ -181,6 +181,8 @@ pub enum BinOper {
     Mul,
     Div,
     Mod,
+    BitAnd,
+    BitOr,
     LShift,
     RShift,
     As,
@@ -208,7 +210,6 @@ pub enum JoinType {
     LeftJoin,
     RightJoin,
     FullOuterJoin,
-    StraightJoin,
 }
 
 /// Nulls order
@@ -242,7 +243,7 @@ pub enum Order {
 }
 
 /// Helper for create name alias
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Alias(String);
 
 /// Null Alias
@@ -343,11 +344,11 @@ impl Quote {
     }
 
     pub fn left(&self) -> char {
-        char::try_from(self.0).unwrap()
+        char::from(self.0)
     }
 
     pub fn right(&self) -> char {
-        char::try_from(self.1).unwrap()
+        char::from(self.1)
     }
 }
 
@@ -624,10 +625,7 @@ mod tests {
             .to_owned();
 
         #[cfg(feature = "backend-mysql")]
-        assert_eq!(
-            query.to_string(MysqlQueryBuilder),
-            r#"SELECT `hello-World_`"#
-        );
+        assert_eq!(query.to_string(MysqlQueryBuilder), r"SELECT `hello-World_`");
         #[cfg(feature = "backend-postgres")]
         assert_eq!(
             query.to_string(PostgresQueryBuilder),
@@ -645,7 +643,7 @@ mod tests {
         let query = Query::select().column(Alias::new("hel`lo")).to_owned();
 
         #[cfg(feature = "backend-mysql")]
-        assert_eq!(query.to_string(MysqlQueryBuilder), r#"SELECT `hel``lo`"#);
+        assert_eq!(query.to_string(MysqlQueryBuilder), r"SELECT `hel``lo`");
         #[cfg(feature = "backend-sqlite")]
         assert_eq!(query.to_string(SqliteQueryBuilder), r#"SELECT "hel`lo""#);
 
@@ -660,7 +658,7 @@ mod tests {
         let query = Query::select().column(Alias::new("hel``lo")).to_owned();
 
         #[cfg(feature = "backend-mysql")]
-        assert_eq!(query.to_string(MysqlQueryBuilder), r#"SELECT `hel````lo`"#);
+        assert_eq!(query.to_string(MysqlQueryBuilder), r"SELECT `hel````lo`");
         #[cfg(feature = "backend-sqlite")]
         assert_eq!(query.to_string(SqliteQueryBuilder), r#"SELECT "hel``lo""#);
 

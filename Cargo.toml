@@ -13,12 +13,17 @@
 edition = "2021"
 rust-version = "1.62"
 name = "sea-query"
-version = "0.30.5"
+version = "0.32.1"
 authors = [
     "Chris Tsang <chris.2y3@outlook.com>",
     "Billy Chan <ccw.billy.123@gmail.com>",
     "Ivan Krivosheev <py.krivosheev@gmail.com>",
 ]
+build = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 description = "🔱 A dynamic query builder for MySQL, Postgres and SQLite"
 documentation = "https://docs.rs/sea-query"
 readme = "README.md"
@@ -43,6 +48,19 @@ rustdoc-args = [
 [lib]
 name = "sea_query"
 path = "src/lib.rs"
+
+[[test]]
+name = "common"
+path = "tests/common.rs"
+
+[[test]]
+name = "option-more-parentheses"
+path = "tests/more-parentheses.rs"
+required-features = [
+    "tests-cfg",
+    "option-more-parentheses",
+    "backend-mysql",
+]
 
 [[test]]
 name = "test-derive"
@@ -78,32 +96,19 @@ required-features = [
     "backend-sqlite",
 ]
 
-[[test]]
-name = "option-more-parentheses"
-path = "tests/more-parentheses.rs"
-required-features = [
-    "tests-cfg",
-    "option-more-parentheses",
-    "backend-mysql",
-]
-
 [[bench]]
 name = "basic"
+path = "benches/basic.rs"
 harness = false
 
 [dependencies.bigdecimal]
-version = "0.3"
+version = "0.4"
 optional = true
 default-features = false
 
 [dependencies.chrono]
 version = "0.4.27"
 features = ["clock"]
-optional = true
-default-features = false
-
-[dependencies.derivative]
-version = "2.2"
 optional = true
 default-features = false
 
@@ -125,6 +130,11 @@ version = "3.4"
 optional = true
 default-features = false
 
+[dependencies.pgvector]
+version = "~0.4"
+optional = true
+default-features = false
+
 [dependencies.postgres-types]
 version = "0"
 optional = true
@@ -135,13 +145,8 @@ version = "1"
 optional = true
 default-features = false
 
-[dependencies.sea-query-attr]
-version = "0.1.1"
-optional = true
-default-features = false
-
 [dependencies.sea-query-derive]
-version = "0.4.0"
+version = "0.4.2"
 optional = true
 default-features = false
 
@@ -152,7 +157,7 @@ optional = true
 default-features = false
 
 [dependencies.time]
-version = "0.3"
+version = "0.3.36"
 features = [
     "macros",
     "formatting",
@@ -185,6 +190,7 @@ all-features = [
 all-types = [
     "postgres-array",
     "postgres-interval",
+    "postgres-vector",
     "with-chrono",
     "with-json",
     "with-rust_decimal",
@@ -194,7 +200,7 @@ all-types = [
     "with-ipnetwork",
     "with-mac_address",
 ]
-attr = ["sea-query-attr"]
+attr = ["sea-query-derive"]
 backend-mysql = []
 backend-postgres = []
 backend-sqlite = []
@@ -205,14 +211,12 @@ default = [
     "backend-sqlite",
 ]
 derive = ["sea-query-derive"]
-hashable-value = [
-    "derivative",
-    "ordered-float",
-]
+hashable-value = ["ordered-float"]
 option-more-parentheses = []
 option-sqlite-exact-column-type = []
 postgres-array = []
 postgres-interval = []
+postgres-vector = ["pgvector"]
 tests-cfg = []
 thread-safe = []
 with-bigdecimal = ["bigdecimal"]

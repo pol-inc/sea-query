@@ -1,8 +1,8 @@
 use inherent::inherent;
 
 use crate::{
-    backend::SchemaBuilder, foreign_key::*, index::*, types::*, ColumnDef, SchemaStatementBuilder,
-    SimpleExpr,
+    backend::SchemaBuilder, foreign_key::*, index::*, types::*, ColumnDef, IntoColumnDef,
+    SchemaStatementBuilder, SimpleExpr,
 };
 
 /// Create a table
@@ -70,7 +70,7 @@ use crate::{
 ///        r#"CREATE TABLE IF NOT EXISTS "character" ("#,
 ///            r#""id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,"#,
 ///            r#""font_size" integer NOT NULL,"#,
-///            r#""character" text NOT NULL,"#,
+///            r#""character" varchar NOT NULL,"#,
 ///            r#""size_w" integer NOT NULL,"#,
 ///            r#""size_h" integer NOT NULL,"#,
 ///            r#""font_id" integer DEFAULT NULL,"#,
@@ -136,9 +136,9 @@ impl TableCreateStatement {
     }
 
     /// Add a new table column
-    pub fn col(&mut self, column: &mut ColumnDef) -> &mut Self {
-        let mut column = column.take();
-        column.table = self.table.clone();
+    pub fn col<C: IntoColumnDef>(&mut self, column: C) -> &mut Self {
+        let mut column = column.into_column_def();
+        column.table.clone_from(&self.table);
         self.columns.push(column);
         self
     }
@@ -215,7 +215,7 @@ impl TableCreateStatement {
     ///     [
     ///         r#"CREATE TABLE "glyph" ("#,
     ///         r#""id" integer NOT NULL,"#,
-    ///         r#""image" text NOT NULL,"#,
+    ///         r#""image" varchar NOT NULL,"#,
     ///         r#"PRIMARY KEY ("id", "image")"#,
     ///         r#")"#,
     ///     ]

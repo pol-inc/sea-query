@@ -47,7 +47,7 @@ impl TableBuilder for SqliteQueryBuilder {
     }
 
     fn prepare_table_drop_opt(&self, _drop_opt: &TableDropOpt, _sql: &mut dyn SqlWriter) {
-        // SQLite does not support table drop options
+        // Sqlite does not support table drop options
     }
 
     fn prepare_table_truncate_statement(
@@ -131,63 +131,77 @@ impl SqliteQueryBuilder {
             "{}",
             match column_type {
                 ColumnType::Char(length) => match length {
-                    Some(length) => format!("text({length})"),
-                    None => "text".into(),
+                    Some(length) => format!("char({length})"),
+                    None => "char".into(),
                 },
                 ColumnType::String(length) => match length {
-                    Some(length) => format!("text({length})"),
-                    None => "text".into(),
+                    StringLen::N(length) => format!("varchar({length})"),
+                    _ => "varchar".into(),
                 },
                 ColumnType::Text => "text".into(),
-                ColumnType::TinyInteger | ColumnType::TinyUnsigned => "integer".into(),
-                ColumnType::SmallInteger | ColumnType::SmallUnsigned => "integer".into(),
+                ColumnType::TinyInteger | ColumnType::TinyUnsigned => integer("tinyint").into(),
+                ColumnType::SmallInteger | ColumnType::SmallUnsigned => integer("smallint").into(),
                 ColumnType::Integer | ColumnType::Unsigned => "integer".into(),
                 #[allow(clippy::if_same_then_else)]
                 ColumnType::BigInteger | ColumnType::BigUnsigned => if is_auto_increment {
                     "integer"
-                } else if cfg!(feature = "option-sqlite-exact-column-type") {
-                    "integer"
                 } else {
-                    "bigint"
+                    integer("bigint")
                 }
                 .into(),
-                ColumnType::Float => "real".into(),
-                ColumnType::Double => "real".into(),
+                ColumnType::Float => "float".into(),
+                ColumnType::Double => "double".into(),
                 ColumnType::Decimal(precision) => match precision {
-                    Some((precision, scale)) => format!("real({precision}, {scale})"),
+                    Some((precision, scale)) => {
+                        if precision > &16 {
+                            panic!("precision cannot be larger than 16");
+                        }
+                        format!("real({precision}, {scale})")
+                    }
                     None => "real".into(),
                 },
-                ColumnType::DateTime => "text".into(),
-                ColumnType::Timestamp => "text".into(),
-                ColumnType::TimestampWithTimeZone => "text".into(),
-                ColumnType::Time => "text".into(),
-                ColumnType::Date => "text".into(),
-                ColumnType::Interval(_, _) => "unsupported".into(),
-                ColumnType::Binary(blob_size) => match blob_size {
-                    BlobSize::Blob(Some(length)) => format!("binary({length})"),
-                    _ => "blob".into(),
+                ColumnType::DateTime => "datetime_text".into(),
+                ColumnType::Timestamp => "timestamp_text".into(),
+                ColumnType::TimestampWithTimeZone => "timestamp_with_timezone_text".into(),
+                ColumnType::Time => "time_text".into(),
+                ColumnType::Date => "date_text".into(),
+                ColumnType::Interval(_, _) =>
+                    unimplemented!("Interval is not available in Sqlite."),
+                ColumnType::Binary(length) => format!("blob({length})"),
+                ColumnType::VarBinary(length) => match length {
+                    StringLen::N(length) => format!("varbinary_blob({length})"),
+                    _ => "varbinary_blob".into(),
                 },
-                ColumnType::VarBinary(length) => format!("binary({length})"),
+                ColumnType::Blob => "blob".into(),
                 ColumnType::Boolean => "boolean".into(),
                 ColumnType::Money(precision) => match precision {
-                    Some((precision, scale)) => format!("integer({precision}, {scale})"),
-                    None => "integer".into(),
+                    Some((precision, scale)) => format!("real_money({precision}, {scale})"),
+                    None => "real_money".into(),
                 },
-                ColumnType::Json => "text".into(),
-                ColumnType::JsonBinary => "text".into(),
-                ColumnType::Uuid => "text(36)".into(),
+                ColumnType::Json => "json_text".into(),
+                ColumnType::JsonBinary => "jsonb_text".into(),
+                ColumnType::Uuid => "uuid_text".into(),
                 ColumnType::Custom(iden) => iden.to_string(),
-                ColumnType::Enum { .. } => "text".into(),
+                ColumnType::Enum { .. } => "enum_text".into(),
                 ColumnType::Array(_) => unimplemented!("Array is not available in Sqlite."),
+                ColumnType::Vector(_) => unimplemented!("Vector is not available in Sqlite."),
                 ColumnType::Cidr => unimplemented!("Cidr is not available in Sqlite."),
                 ColumnType::Inet => unimplemented!("Inet is not available in Sqlite."),
                 ColumnType::MacAddr => unimplemented!("MacAddr is not available in Sqlite."),
-                ColumnType::Year(_) => unimplemented!("Year is not available in Sqlite."),
+                ColumnType::Year => unimplemented!("Year is not available in Sqlite."),
                 ColumnType::Bit(_) => unimplemented!("Bit is not available in Sqlite."),
                 ColumnType::VarBit(_) => unimplemented!("VarBit is not available in Sqlite."),
                 ColumnType::LTree => unimplemented!("LTree is not available in Sqlite."),
             }
         )
         .unwrap()
+    }
+}
+
+fn integer(ty: &str) -> &str {
+    if cfg!(feature = "option-sqlite-exact-column-type") {
+        "integer"
+    } else {
+        ty
     }
 }

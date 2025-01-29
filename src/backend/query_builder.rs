@@ -23,15 +23,15 @@ pub trait QueryBuilder:
         if let Some(table) = &insert.table {
             write!(sql, " INTO ").unwrap();
             self.prepare_table_ref(table, sql);
-            write!(sql, " ").unwrap();
         }
 
-        self.prepare_output(&insert.returning, sql);
-
         if insert.default_values.is_some() && insert.columns.is_empty() && insert.source.is_none() {
+            self.prepare_output(&insert.returning, sql);
+            write!(sql, " ").unwrap();
             let num_rows = insert.default_values.unwrap();
             self.insert_default_values(num_rows, sql);
         } else {
+            write!(sql, " ").unwrap();
             write!(sql, "(").unwrap();
             insert.columns.iter().fold(true, |first, col| {
                 if !first {
@@ -41,6 +41,8 @@ pub trait QueryBuilder:
                 false
             });
             write!(sql, ")").unwrap();
+
+            self.prepare_output(&insert.returning, sql);
 
             if let Some(source) = &insert.source {
                 write!(sql, " ").unwrap();
@@ -469,12 +471,9 @@ pub trait QueryBuilder:
             None => {}
         };
 
-        match &select_expr.alias {
-            Some(alias) => {
-                write!(sql, " AS ").unwrap();
-                alias.prepare(sql.as_writer(), self.quote());
-            }
-            None => {}
+        if let Some(alias) = &select_expr.alias {
+            write!(sql, " AS ").unwrap();
+            alias.prepare(sql.as_writer(), self.quote());
         };
     }
 
@@ -590,6 +589,8 @@ pub trait QueryBuilder:
                 BinOper::As => "AS",
                 BinOper::Escape => "ESCAPE",
                 BinOper::Custom(raw) => raw,
+                BinOper::BitAnd => "&",
+                BinOper::BitOr => "|",
                 #[allow(unreachable_patterns)]
                 _ => unimplemented!(),
             }
@@ -665,6 +666,8 @@ pub trait QueryBuilder:
                     Function::Coalesce => "COALESCE",
                     Function::Count => "COUNT",
                     Function::IfNull => self.if_null_function(),
+                    Function::Greatest => self.greatest_function(),
+                    Function::Least => self.least_function(),
                     Function::CharLength => self.char_length_function(),
                     Function::Cast => "CAST",
                     Function::Lower => "LOWER",
@@ -674,6 +677,7 @@ pub trait QueryBuilder:
                     Function::Custom(_) => "",
                     Function::Random => self.random_function(),
                     Function::Round => "ROUND",
+                    Function::Md5 => "MD5",
                     #[cfg(feature = "backend-postgres")]
                     Function::PgFunction(_) => unimplemented!(),
                 }
@@ -774,15 +778,6 @@ pub trait QueryBuilder:
             "Cannot build a with query that has no common table expression!"
         );
 
-        if with_clause.recursive {
-            assert_eq!(
-                with_clause.cte_expressions.len(),
-                1,
-                "Cannot build a recursive query with more than one common table! \
-                A recursive with query must have a single cte inside it that has a union query of \
-                two queries!"
-            );
-        }
         for cte in &with_clause.cte_expressions {
             if !cte_first {
                 write!(sql, ", ").unwrap();
@@ -882,7 +877,6 @@ pub trait QueryBuilder:
                 JoinType::LeftJoin => "LEFT JOIN",
                 JoinType::RightJoin => "RIGHT JOIN",
                 JoinType::FullOuterJoin => "FULL OUTER JOIN",
-                JoinType::StraightJoin => "STRAIGHT_JOIN",
             }
         )
         .unwrap()
@@ -990,6 +984,10 @@ pub trait QueryBuilder:
 
     /// Convert a SQL value into syntax-specific string
     fn value_to_string(&self, v: &Value) -> String {
+        self.value_to_string_common(v)
+    }
+
+    fn value_to_string_common(&self, v: &Value) -> String {
         let mut s = String::new();
         match v {
             Value::Bool(None)
@@ -1040,6 +1038,8 @@ pub trait QueryBuilder:
             Value::MacAddress(None) => write!(s, "NULL").unwrap(),
             #[cfg(feature = "postgres-array")]
             Value::Array(_, None) => write!(s, "NULL").unwrap(),
+            #[cfg(feature = "postgres-vector")]
+            Value::Vector(None) => write!(s, "NULL").unwrap(),
             Value::Bool(Some(b)) => write!(s, "{}", if *b { "TRUE" } else { "FALSE" }).unwrap(),
             Value::TinyInt(Some(v)) => write!(s, "{v}").unwrap(),
             Value::SmallInt(Some(v)) => write!(s, "{v}").unwrap(),
@@ -1113,6 +1113,17 @@ pub trait QueryBuilder:
                     .join(",")
             )
             .unwrap(),
+            #[cfg(feature = "postgres-vector")]
+            Value::Vector(Some(v)) => {
+                write!(s, "'[").unwrap();
+                for (i, &element) in v.as_slice().iter().enumerate() {
+                    if i != 0 {
+                        write!(s, ",").unwrap();
+                    }
+                    write!(s, "{element}").unwrap();
+                }
+                write!(s, "]'").unwrap();
+            }
             #[cfg(feature = "with-ipnetwork")]
             Value::IpNetwork(Some(v)) => write!(s, "'{v}'").unwrap(),
             #[cfg(feature = "with-mac_address")]
@@ -1170,9 +1181,17 @@ pub trait QueryBuilder:
         on_conflict_action: &Option<OnConflictAction>,
         sql: &mut dyn SqlWriter,
     ) {
+        self.prepare_on_conflict_action_common(on_conflict_action, sql);
+    }
+
+    fn prepare_on_conflict_action_common(
+        &self,
+        on_conflict_action: &Option<OnConflictAction>,
+        sql: &mut dyn SqlWriter,
+    ) {
         if let Some(action) = on_conflict_action {
             match action {
-                OnConflictAction::DoNothing => {
+                OnConflictAction::DoNothing(_) => {
                     write!(sql, " DO NOTHING").unwrap();
                 }
                 OnConflictAction::Update(update_strats) => {
@@ -1440,6 +1459,18 @@ pub trait QueryBuilder:
     /// The name of the function that represents the "if null" condition.
     fn if_null_function(&self) -> &str {
         "IFNULL"
+    }
+
+    #[doc(hidden)]
+    /// The name of the function that represents the "greatest" function.
+    fn greatest_function(&self) -> &str {
+        "GREATEST"
+    }
+
+    #[doc(hidden)]
+    /// The name of the function that represents the "least" function.
+    fn least_function(&self) -> &str {
+        "LEAST"
     }
 
     #[doc(hidden)]
